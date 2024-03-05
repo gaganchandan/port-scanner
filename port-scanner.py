@@ -15,16 +15,12 @@ def syn_ping(targets: list[str], timeout=0.01):
     s.settimeout(timeout)
     alive = []
     for target in targets:
-        # s.connect((target, 80))
         packet = IP(dst=target) / TCP(dport=80, flags="S")
         try:
             s.sendto(bytes(packet), (target, 0))
             data = s.recvfrom(1024)
             packet = IP(data[0])
-            # packet.show()
-            # Check if packet source IP is in targets
             if packet.src in targets:
-                # print(packet.src, "is alive")
                 alive.append(packet.src)
         except socket.timeout:
             continue
@@ -45,15 +41,12 @@ def ack_ping(targets: list[str], timeout=0.01):
     s.settimeout(timeout)
     alive = []
     for target in targets:
-        # s.connect((target, 80))
         packet = IP(dst=target) / TCP(dport=80, flags="A")
         try:
             s.sendto(bytes(packet), (target, 0))
             data = s.recvfrom(1024)
             packet = IP(data[0])
-            # packet.show()
             if packet.src in targets:
-                # print(packet.src, "is alive")
                 alive.append(packet.src)
         except socket.timeout:
             continue
@@ -74,15 +67,12 @@ def icmp_ping(targets: list[str], timeout=0.01):
     s.settimeout(timeout)
     alive = []
     for target in targets:
-        # s.connect((target, 80))
         packet = IP(dst=target) / ICMP()
         try:
             s.sendto(bytes(packet), (target, 0))
             data = s.recvfrom(1024)
             packet = IP(data[0])
-            # packet.show()
             if packet.src in targets:
-                # print(packet.src, "is alive")
                 alive.append(packet.src)
         except socket.timeout:
             continue
@@ -128,7 +118,8 @@ services = {21: "ftp",
             3306: "mysql",
             3389: "ms-wbt-server",
             5900: "vnc",
-            8080: "http-proxy"}
+            8080: "http-proxy",
+            }
 
 
 def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
@@ -143,17 +134,17 @@ def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
         packets = []
         print("Scanning", target)
         start = time.time()
-        # s.connect((target, 80))
         for port in ports:
             packet = IP(dst=target) / TCP(dport=port, flags="S")
             s.sendto(bytes(packet), (target, 0))
             try:
-                data = s.recvfrom(1024)
-                packet = IP(data[0])
-                # packet.show()
-                # Check if packet source IP is in targets
-                if packet.src == target:
-                    packets.append(packet)
+                data1 = s.recvfrom(1024)
+                data2 = s.recvfrom(1024)
+                data3 = s.recvfrom(1024)
+                for data in [data1, data2, data3]:
+                    packet = IP(data[0])
+                    if packet.src == target:
+                        packets.append(packet)
             except socket.timeout:
                 continue
             except PermissionError:
@@ -170,11 +161,37 @@ def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
     for elem in open_ports:
         print("IP:", elem[0], " Port:", elem[1],
               " Service:", services.get(elem[1], "unknown"))
+    return open_ports
+
+
+def http_scan(targets: list[str], ports: list[int], timeout=0.1):
+    print("Identifying HTTP ports... ")
+    time.sleep(1)
+    for target in targets:
+        print("Scanning", target)
+        start = time.time()
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        for port in ports:
+            try:
+                s.connect((target, port))
+                s.send(b"GET / HTTP/1.1\r\n\r\n")
+                data1 = s.recvfrom(1024)
+                data2 = s.recvfrom(1024)
+                data3 = s.recvfrom(1024)
+                for data in [data1, data2, data3]:
+                    if "HTTP" in str(data[0]):
+                        print("HTTP port detected at",
+                              target + ":" + str(port))
+            except:
+                continue
+        s.close()
+        end = time.time()
+        print("Finished. Time elapsed: " + str(end - start) + " seconds")
 
 
 start = time.time()
 
-# Check if run as root
 if os.geteuid() != 0:
     print("Program must be run as root")
     exit()
@@ -196,9 +213,14 @@ ip.add_argument('-l', '--list',
 
 ip.add_argument('-s', '--subnet', help="Subnet")
 
-parser.add_argument(
+port = parser.add_mutually_exclusive_group(required=False)
+
+port.add_argument(
     '-p', '--ports', help="List of port numbers seperated by spaces",
     type=int, nargs='+')
+port.add_argument(
+    '-r' '--range', help='Range of ports specified by lower and upper bounds seperated by a space', nargs=2, type=int
+)
 
 
 args = parser.parse_args()
@@ -230,6 +252,8 @@ if (args.subnet):
 
 if (args.ports):
     ports = args.ports
+elif (args.r__range):
+    ports = list(range(args.r__range[0], args.r__range[1]+1))
 else:
     ports = list(services.keys())
 
@@ -238,11 +262,13 @@ if (args.mode == "discover"):
 elif (args.mode == "scan"):
     open_ports = syn_scan(ips, ports)
     for elem in open_ports:
-        print("IP:", elem[0], " Port:", elem[1],
-              " Service:", services.get(elem[1], "unknown"))
+        http_scan([elem[0]], [elem[1]])
+
 else:
     alive = host_discovery(ips)
-    syn_scan(alive, ports)
+    open_ports = syn_scan(alive, ports)
+    for elem in open_ports:
+        http_scan([elem[0]], [elem[1]])
 
 end = time.time()
 print("Scan completed in", str(end-start), "seconds")
