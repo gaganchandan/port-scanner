@@ -1,0 +1,13 @@
+IP address: 127.0.0.1
+
+
+LIVE HOSTS:
+127.0.0.1
+
+
+OPEN PORTS:
+IP: 127.0.0.1  | Port: 1337  | Service: unknown
+
+
+HTTP SERVICES:
+HTTP service found at 127.0.0.1 on port 1337

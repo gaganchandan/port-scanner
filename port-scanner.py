@@ -6,6 +6,10 @@ import os
 import ipaddress
 
 
+filename = "output.txt"
+file = open(filename, "w")
+
+
 def syn_ping(targets: list[str], timeout=0.01):
     print("Performing TCP SYN ping... ")
     time.sleep(1)
@@ -91,11 +95,23 @@ def host_discovery(targets: list[str], timeout=0.01):
     alive = sorted(list(set(syn_ping(targets, timeout) +
                             ack_ping(targets, timeout) +
                             icmp_ping(targets, timeout))))
-    for elem in alive:
-        print(elem + " is alive")
     end = time.time()
     print("Host discovery complete. Total time elapsed: " +
           str(end - start) + " seconds")
+    print()
+    print()
+    print("*******************************************************************************")
+    print("LIVE HOSTS")
+    print("*******************************************************************************")
+    for elem in alive:
+        print(elem)
+    print("*******************************************************************************")
+    print("*******************************************************************************")
+    print()
+    print()
+    file.write("\n\nLIVE HOSTS:\n")
+    for elem in alive:
+        print(elem, file=file)
     return alive
 
 
@@ -123,7 +139,7 @@ services = {21: "ftp",
 
 
 def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
-    print("Performing SYN scan... ")
+    print("Performing SYN scan...\n")
     time.sleep(1)
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     s.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
@@ -153,20 +169,31 @@ def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
             if packet[TCP].flags == 18:
                 open_ports.append((target, packet[TCP].sport))
         end = time.time()
-        print("Finished. Time elapsed: " + str(end - start) + " seconds")
+        print("Finished. Time elapsed: " + str(end - start) + " seconds\n")
     s.close()
     end = time.time()
-    print("Total time elapsed: " + str(end - start) + " seconds")
-    print("Open ports: ")
+    print("Total time elapsed: " + str(end - start) + " seconds\n")
+    print("*******************************************************************************")
+    print("OPEN PORTS")
+    print("*******************************************************************************")
     for elem in open_ports:
-        print("IP:", elem[0], " Port:", elem[1],
-              " Service:", services.get(elem[1], "unknown"))
+        print("IP:", elem[0], " | Port:", elem[1],
+              " | Service:", services.get(elem[1], "unknown"))
+    print("*******************************************************************************")
+    print("*******************************************************************************")
+    print()
+    print()
+    file.write("\n\nOPEN PORTS:\n")
+    for elem in open_ports:
+        print("IP:", elem[0], " | Port:", elem[1],
+              " | Service:", services.get(elem[1], "unknown"), file=file)
     return open_ports
 
 
 def http_scan(targets: list[str], ports: list[int], timeout=0.1):
-    print("Identifying HTTP ports... ")
+    print("Identifying HTTP ports...\n")
     time.sleep(1)
+    found = []
     for target in targets:
         print("Scanning", target)
         start = time.time()
@@ -181,13 +208,24 @@ def http_scan(targets: list[str], ports: list[int], timeout=0.1):
                 data3 = s.recvfrom(1024)
                 for data in [data1, data2, data3]:
                     if "HTTP" in str(data[0]):
-                        print("HTTP port detected at",
-                              target + ":" + str(port))
+                        found.append((target, port))
             except:
                 continue
         s.close()
         end = time.time()
-        print("Finished. Time elapsed: " + str(end - start) + " seconds")
+        print("Finished. Time elapsed: " + str(end - start) + " seconds\n")
+    print("*******************************************************************************")
+    print("HTTP SERVICES")
+    print("*******************************************************************************")
+    for elem in found:
+        print("HTTP service found at", elem[0], "on port", elem[1])
+    print("*******************************************************************************")
+    print("*******************************************************************************")
+    print()
+    print()
+    file.write("\n\nHTTP SERVICES:\n")
+    for elem in found:
+        print("HTTP service found at", elem[0], "on port", elem[1], file=file)
 
 
 start = time.time()
@@ -196,6 +234,24 @@ if os.geteuid() != 0:
     print("Program must be run as root")
     exit()
 
+banner = \
+    """
+*******************************************************************************
+*******************************************************************************
+
+ _____   ____  _____ _______    _____  _____          _   _ _   _ ______ _____
+|  __ \\ / __ \\|  __ |__   __|  / ____|/ ____|   /\\   | \\ | | \\ | |  ____|  __ \\
+| |__) | |  | | |__) | | |    | (___ | |       /  \\  |  \\| |  \\| | |__  | |__) |
+|  ___/| |  | |  _  /  | |     \\___ \\| |      / /\\ \\ | . ` | . ` |  __| |  _  /
+| |    | |__| | | \\ \\  | |     ____) | |____ / ____ \\| |\\  | |\\  | |____| | \\ \\
+|_|     \\____/|_|  \\_\\ |_|    |_____/ \\_____/_/    \\_|_| \\_|_| \\_|______|_|  \\_\\
+
+
+*******************************************************************************
+*******************************************************************************
+"""
+
+print(banner)
 
 parser = argparse.ArgumentParser()
 
@@ -231,8 +287,10 @@ if (args.ip):
     try:
         ipaddress.ip_address(args.ip)
         ips.append(args.ip)
+        file.write("IP address: " + args.ip + "\n")
     except ValueError:
         print("Invalid IP address", args.ip)
+        exit()
 
 
 if (args.list):
@@ -242,13 +300,20 @@ if (args.list):
             ips.append(ip)
         except ValueError:
             print("Invalid IP address", args.ip)
+            exit()
+        file.write("IP addresses:\n")
+        for ip in args.list:
+            print(ip + "\n", file=file)
 
 if (args.subnet):
     try:
         network = ipaddress.ip_network(args.subnet)
         ips = [str(ip) for ip in list(network)]
+        file.write("Subnet: " + args.subnet + "\n")
     except ValueError:
         print("Invalid subnet", args.subnet)
+        exit()
+
 
 if (args.ports):
     ports = args.ports
