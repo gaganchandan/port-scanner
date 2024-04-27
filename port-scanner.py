@@ -190,27 +190,26 @@ def syn_scan(targets: list[str], ports: list[int], timeout=0.1):
     return open_ports
 
 
-def http_scan(targets: list[str], ports: list[int], timeout=0.1):
+def http_scan(targets: list[str], timeout=0.1):
     print("Identifying HTTP ports...\n")
     time.sleep(1)
     found = []
-    for target in targets:
-        print("Scanning", target)
+    for i in range(len(targets)):
+        print("Scanning", targets[i][0])
         start = time.time()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
-        for port in ports:
-            try:
-                s.connect((target, port))
-                s.send(b"GET / HTTP/1.1\r\n\r\n")
-                data1 = s.recvfrom(1024)
-                data2 = s.recvfrom(1024)
-                data3 = s.recvfrom(1024)
-                for data in [data1, data2, data3]:
-                    if "HTTP" in str(data[0]):
-                        found.append((target, port))
-            except:
-                continue
+        try:
+            s.connect((targets[i][0], targets[i][1]))
+            s.send(b"GET / HTTP/1.1\r\n\r\n")
+            data1 = s.recvfrom(1024)
+            data2 = s.recvfrom(1024)
+            data3 = s.recvfrom(1024)
+            for data in [data1, data2, data3]:
+                if "HTTP" in str(data[0]):
+                    found.append((targets[i][0], targets[i][1]))
+        except:
+            continue
         s.close()
         end = time.time()
         print("Finished. Time elapsed: " + str(end - start) + " seconds\n")
@@ -326,14 +325,12 @@ if (args.mode == "discover"):
     host_discovery(ips)
 elif (args.mode == "scan"):
     open_ports = syn_scan(ips, ports)
-    for elem in open_ports:
-        http_scan([elem[0]], [elem[1]])
+    http_scan(open_ports)
 
 else:
     alive = host_discovery(ips)
     open_ports = syn_scan(alive, ports)
-    for elem in open_ports:
-        http_scan([elem[0]], [elem[1]])
+    http_scan(open_ports)
 
 end = time.time()
 print("Scan completed in", str(end-start), "seconds")
